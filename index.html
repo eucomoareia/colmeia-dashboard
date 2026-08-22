@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Monitoramento da colmeia</title>
+<meta name="description" content="Painel de telemetria da colmeia: temperatura, umidade, nivel sonoro e clipes de audio.">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🐝</text></svg>">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<a class="skip" href="#conteudo">Pular para o conteudo</a>
+
+<header class="topbar">
+  <div class="topbar-in">
+    <div class="brand">
+      <span class="brand-mark" aria-hidden="true">🐝</span>
+      <div>
+        <h1 id="titulo">Monitoramento da colmeia</h1>
+        <p class="brand-sub" id="statusLinha">
+          <span class="dot dot-idle" id="statusDot" aria-hidden="true"></span>
+          <span id="statusTexto">Carregando…</span>
+        </p>
+      </div>
+    </div>
+    <div class="topbar-acoes">
+      <label class="campo">
+        <span class="campo-rot">Dispositivo</span>
+        <select id="seletorDispositivo" aria-label="Dispositivo">
+          <option value="">Todos</option>
+        </select>
+      </label>
+      <button class="btn-icone" id="btnTema" type="button" aria-label="Alternar tema claro e escuro" title="Alternar tema">
+        <span aria-hidden="true" id="btnTemaIcone">◐</span>
+      </button>
+      <button class="btn-icone" id="btnAtualizar" type="button" aria-label="Atualizar agora" title="Atualizar agora">
+        <span aria-hidden="true">↻</span>
+      </button>
+    </div>
+  </div>
+</header>
+
+<main id="conteudo">
+
+  <div class="filtros" role="group" aria-label="Periodo">
+    <div class="seg" id="segPeriodo">
+      <button type="button" data-horas="1">1 h</button>
+      <button type="button" data-horas="6">6 h</button>
+      <button type="button" data-horas="24" class="ativo" aria-pressed="true">24 h</button>
+      <button type="button" data-horas="168">7 d</button>
+      <button type="button" data-horas="0">Tudo</button>
+    </div>
+    <p class="filtros-nota" id="notaPeriodo"></p>
+  </div>
+
+  <div id="alerta" class="alerta" hidden role="alert"></div>
+
+  <section class="tiles" aria-label="Estado atual">
+    <article class="tile tile-hero">
+      <p class="tile-rot">Temperatura</p>
+      <p class="tile-valor"><span id="vTemp">—</span><span class="tile-un">°C</span></p>
+      <p class="tile-sub" id="sTemp">—</p>
+    </article>
+    <article class="tile">
+      <p class="tile-rot">Umidade</p>
+      <p class="tile-valor"><span id="vUmid">—</span><span class="tile-un">%</span></p>
+      <p class="tile-sub" id="sUmid">—</p>
+    </article>
+    <article class="tile">
+      <p class="tile-rot">Nivel sonoro</p>
+      <p class="tile-valor"><span id="vDb">—</span><span class="tile-un">dBFS</span></p>
+      <p class="tile-sub" id="sDb">—</p>
+    </article>
+    <article class="tile">
+      <p class="tile-rot">Leituras no periodo</p>
+      <p class="tile-valor"><span id="vTotal">—</span></p>
+      <p class="tile-sub" id="sTotal">—</p>
+    </article>
+  </section>
+
+  <section class="graficos" aria-label="Series ao longo do tempo">
+    <article class="card">
+      <header class="card-cab">
+        <h2><span class="chave" data-serie="temp" aria-hidden="true"></span>Temperatura</h2>
+        <p class="card-sub" id="subTemp">graus Celsius</p>
+      </header>
+      <div class="grafico" id="gTemp" data-serie="temp"></div>
+    </article>
+    <article class="card">
+      <header class="card-cab">
+        <h2><span class="chave" data-serie="umidade" aria-hidden="true"></span>Umidade relativa</h2>
+        <p class="card-sub" id="subUmid">por cento</p>
+      </header>
+      <div class="grafico" id="gUmid" data-serie="umidade"></div>
+    </article>
+    <article class="card">
+      <header class="card-cab">
+        <h2><span class="chave" data-serie="db" aria-hidden="true"></span>Nivel sonoro</h2>
+        <p class="card-sub" id="subDb">dBFS, pico do clipe</p>
+      </header>
+      <div class="grafico" id="gDb" data-serie="db"></div>
+    </article>
+  </section>
+
+  <section class="card" aria-label="Leituras recentes">
+    <header class="card-cab card-cab-linha">
+      <div>
+        <h2>Leituras recentes</h2>
+        <p class="card-sub" id="subTabela">—</p>
+      </div>
+      <label class="check">
+        <input type="checkbox" id="soComAudio">
+        <span>So com audio</span>
+      </label>
+    </header>
+    <div class="tabela-rolo">
+      <table class="tabela">
+        <thead>
+          <tr>
+            <th scope="col">Horario</th>
+            <th scope="col">Dispositivo</th>
+            <th scope="col" class="num">Temp (°C)</th>
+            <th scope="col" class="num">Umidade (%)</th>
+            <th scope="col" class="num">Ruido (dBFS)</th>
+            <th scope="col">Audio</th>
+          </tr>
+        </thead>
+        <tbody id="corpoTabela">
+          <tr><td colspan="6" class="vazio">Carregando…</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <footer class="card-rodape">
+      <button type="button" class="btn" id="btnMais" hidden>Mostrar mais</button>
+    </footer>
+  </section>
+
+  <footer class="rodape">
+    <p>Dados lidos direto do Supabase (tabela <code>leituras</code>) pelo navegador, sem servidor no meio. Audios ficam no bucket <code>audio-colmeia</code>.</p>
+  </footer>
+</main>
+
+<div class="tooltip" id="tooltip" hidden role="status" aria-live="polite"></div>
+
+<script src="config.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
