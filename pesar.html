@@ -72,6 +72,14 @@ td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
 .sobe{color:var(--ok);font-weight:600}
 .desce{color:var(--acento);font-weight:600}
 .vazio{color:var(--ink-3);text-align:center;padding:20px 0}
+.campo{display:block;width:100%;font:16px system-ui,sans-serif;color:var(--ink);
+  background:var(--plano);border:1px solid var(--borda);border-radius:11px;
+  padding:13px 14px;margin-bottom:10px}
+.campo:focus{outline:none;border-color:var(--acento)}
+.sessao{display:flex;align-items:center;justify-content:space-between;gap:10px;
+  font-size:13px;color:var(--ink-3);margin-bottom:14px}
+.sessao button{font:inherit;color:var(--azul);background:none;border:0;padding:0;cursor:pointer;
+  text-decoration:underline}
 .pe{text-align:center;font-size:13px;color:var(--ink-3);margin-top:18px}
 .pe a{color:var(--azul)}
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}
@@ -89,7 +97,22 @@ td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
 
 <div id="aviso" hidden role="status" aria-live="polite"></div>
 
-<form id="form" class="cartao">
+<div class="cartao" id="cartaoLogin" hidden>
+  <label class="rot" for="email">Entrar para registrar</label>
+  <input class="campo" id="email" type="email" autocomplete="username"
+         inputmode="email" placeholder="seu email">
+  <input class="campo" id="senha" type="password" autocomplete="current-password"
+         placeholder="senha">
+  <button class="btn" type="button" id="btnEntrar">Entrar</button>
+  <p class="fotoNota">Só quem entra consegue registrar. Qualquer pessoa continua
+     podendo ver o painel.</p>
+</div>
+
+<div class="sessao" id="barraSessao" hidden>
+  <span id="quem"></span><button type="button" id="btnSair">sair</button>
+</div>
+
+<form id="form" class="cartao" hidden>
   <label class="rot" for="peso">Peso na balança</label>
   <div class="pesoLinha">
     <input id="peso" type="text" inputmode="decimal" autocomplete="off"
@@ -99,7 +122,7 @@ td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
   <p class="dica" id="dica">Peso bruto, caixa mais colônia.</p>
 </form>
 
-<div class="cartao" id="fotoBox">
+<div class="cartao" id="fotoBox" hidden>
   <label class="rot" for="fotoInput">Foto</label>
   <button class="btn btn-2" type="button" id="fotoBtn">Tirar foto</button>
   <input id="fotoInput" type="file" accept="image/*" capture="environment" aria-label="Tirar foto">
@@ -107,7 +130,7 @@ td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
   <p class="fotoNota" id="fotoNota">Opcional. A foto é reduzida antes de subir.</p>
 </div>
 
-<button class="btn" id="enviar" type="button">Registrar pesagem</button>
+<button class="btn" id="enviar" type="button" hidden>Registrar pesagem</button>
 
 <div class="cartao" style="margin-top:14px">
   <label class="rot">Últimas pesagens</label>
@@ -126,16 +149,77 @@ td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
   const C = window.CONFIG;
   const REST = C.supabaseUrl.replace(/\/+$/,"") + "/rest/v1";
   const STOR = C.supabaseUrl.replace(/\/+$/,"") + "/storage/v1/object";
+  const AUTH = C.supabaseUrl.replace(/\/+$/,"") + "/auth/v1";
   const BUCKET_FOTO = "fotos-colmeia";
   const DISPOSITIVO = "colmeia-01";
+  const GUARDA = "colmeia.sessao";
   let chave = C.supabaseKey;
   let arquivo = null;
+  let sessao = null;
 
   const $ = (id) => document.getElementById(id);
   const fmt = new Intl.DateTimeFormat("pt-BR",{day:"2-digit",month:"2-digit",hour:"2-digit",minute:"2-digit"});
 
+  // Leitura vai com a chave publica. ESCRITA vai com o token do usuario, que e
+  // o que as policies de pesagem e de foto passaram a exigir.
   function cab(extra) {
     return Object.assign({ apikey: chave, Authorization: "Bearer " + chave }, extra || {});
+  }
+  function cabAuth(extra) {
+    const tok = sessao && sessao.access_token ? sessao.access_token : chave;
+    return Object.assign({ apikey: chave, Authorization: "Bearer " + tok }, extra || {});
+  }
+
+  function guardar(s) {
+    sessao = s;
+    try { s ? localStorage.setItem(GUARDA, JSON.stringify(s)) : localStorage.removeItem(GUARDA); }
+    catch (e) {}
+    pintarSessao();
+  }
+  function recuperar() {
+    try { const v = localStorage.getItem(GUARDA); return v ? JSON.parse(v) : null; }
+    catch (e) { return null; }
+  }
+  function pintarSessao() {
+    const dentro = !!(sessao && sessao.access_token);
+    $("cartaoLogin").hidden = dentro;
+    $("barraSessao").hidden = !dentro;
+    $("form").hidden = !dentro;
+    $("fotoBox").hidden = !dentro;
+    $("enviar").hidden = !dentro;
+    if (dentro) $("quem").textContent = (sessao.email || "conectado");
+  }
+
+  async function entrar(email, senha) {
+    const r = await fetch(AUTH + "/token?grant_type=password", {
+      method: "POST",
+      headers: { apikey: chave, "Content-Type": "application/json" },
+      body: JSON.stringify({ email, password: senha })
+    });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(j.error_description || j.msg || j.error || ("HTTP " + r.status));
+    guardar({ access_token: j.access_token, refresh_token: j.refresh_token,
+              expira_em: Date.now() + (j.expires_in || 3600) * 1000,
+              email: (j.user && j.user.email) || email });
+  }
+
+  // O access_token dura ~1 h. Renova antes de cada escrita para voce nao
+  // descobrir que caiu justo na frente da colmeia.
+  async function renovarSePreciso() {
+    if (!sessao || !sessao.refresh_token) return;
+    if (Date.now() < (sessao.expira_em || 0) - 120000) return;
+    try {
+      const r = await fetch(AUTH + "/token?grant_type=refresh_token", {
+        method: "POST",
+        headers: { apikey: chave, "Content-Type": "application/json" },
+        body: JSON.stringify({ refresh_token: sessao.refresh_token })
+      });
+      const j = await r.json();
+      if (!r.ok || !j.access_token) throw new Error("sessao expirada");
+      guardar({ access_token: j.access_token, refresh_token: j.refresh_token || sessao.refresh_token,
+                expira_em: Date.now() + (j.expires_in || 3600) * 1000,
+                email: (j.user && j.user.email) || sessao.email });
+    } catch (e) { guardar(null); throw new Error("Sua sessao expirou. Entre de novo."); }
   }
   function aviso(txt, tipo) {
     const el = $("aviso");
@@ -193,13 +277,15 @@ td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
     }
     const btn = $("enviar");
     btn.disabled = true; btn.textContent = "Enviando…";
+    try { await renovarSePreciso(); }
+    catch (e) { aviso(e.message, "erro"); btn.disabled = false; btn.textContent = "Registrar pesagem"; return; }
 
     let foto = null;
     if (arquivo) {
       const nome = nomeFoto();
       try {
         const r = await fetch(`${STOR}/${BUCKET_FOTO}/${nome}`, {
-          method: "POST", headers: cab({ "Content-Type": "image/jpeg" }), body: arquivo
+          method: "POST", headers: cabAuth({ "Content-Type": "image/jpeg" }), body: arquivo
         });
         if (r.ok) foto = nome;
         else aviso("A foto não subiu (HTTP " + r.status + "), mas vou registrar o peso mesmo assim.", "erro");
@@ -213,7 +299,7 @@ td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
       if (foto) corpo.foto_nome = foto;
       const r = await fetch(`${REST}/pesagens`, {
         method: "POST",
-        headers: cab({ "Content-Type": "application/json", Prefer: "return=minimal" }),
+        headers: cabAuth({ "Content-Type": "application/json", Prefer: "return=minimal" }),
         body: JSON.stringify(corpo)
       });
       if (!r.ok) throw new Error("HTTP " + r.status + " " + (await r.text()).slice(0,140));
@@ -276,6 +362,22 @@ td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
     }
   }
 
+  $("btnEntrar").addEventListener("click", async () => {
+    const b = $("btnEntrar");
+    b.disabled = true; b.textContent = "Entrando…";
+    try {
+      await entrar($("email").value.trim(), $("senha").value);
+      $("senha").value = "";
+      aviso("Conectado. Pode registrar.", "ok");
+    } catch (e) {
+      aviso("<strong>Não consegui entrar.</strong><br>" + String(e.message).replace(/[<>&]/g,""), "erro");
+    } finally { b.disabled = false; b.textContent = "Entrar"; }
+  });
+  $("senha").addEventListener("keydown", (e) => { if (e.key === "Enter") $("btnEntrar").click(); });
+  $("btnSair").addEventListener("click", () => { guardar(null); aviso("Você saiu.", "ok"); });
+
+  sessao = recuperar();
+  pintarSessao();
   carregar();
 })();
 </script>
