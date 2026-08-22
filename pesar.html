@@ -1,0 +1,283 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Pesar a colmeia</title>
+<meta name="theme-color" content="#f9f9f7">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚖️</text></svg>">
+<style>
+:root{
+  color-scheme: light;
+  --plano:#f9f9f7; --superficie:#fcfcfb; --ink:#0b0b0b; --ink-2:#52514e; --ink-3:#898781;
+  --grade:#e1e0d9; --eixo:#c3c2b7; --borda:rgba(11,11,11,.10);
+  --acento:#eb6834; --ok:#0ca30c; --critico:#d03b3b; --azul:#2a78d6;
+}
+@media (prefers-color-scheme: dark){:root{
+  color-scheme: dark;
+  --plano:#0d0d0d; --superficie:#1a1a19; --ink:#fff; --ink-2:#c3c2b7; --ink-3:#898781;
+  --grade:#2c2c2a; --eixo:#383835; --borda:rgba(255,255,255,.10);
+  --acento:#d95926; --azul:#3987e5;
+}}
+*{box-sizing:border-box} [hidden]{display:none !important}
+html,body{margin:0;padding:0}
+body{background:var(--plano);color:var(--ink);
+  font:16px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif;-webkit-font-smoothing:antialiased;
+  padding:max(16px,env(safe-area-inset-top)) 16px calc(24px + env(safe-area-inset-bottom));
+  max-width:34rem;margin:0 auto}
+h1{font-size:20px;font-weight:600;letter-spacing:-.01em;margin:0}
+p{margin:0}
+.topo{display:flex;align-items:center;gap:12px;margin-bottom:20px}
+.marca{width:44px;height:44px;flex:none;display:grid;place-items:center;font-size:22px;
+  background:var(--superficie);border:1px solid var(--borda);border-radius:13px}
+.sub{font-size:13px;color:var(--ink-3);margin-top:2px}
+
+.cartao{background:var(--superficie);border:1px solid var(--borda);border-radius:16px;
+  padding:18px;margin-bottom:14px}
+label.rot{display:block;font-size:12px;text-transform:uppercase;letter-spacing:.06em;
+  color:var(--ink-3);font-weight:600;margin-bottom:8px}
+
+.pesoLinha{display:flex;align-items:baseline;gap:10px}
+#peso{flex:1;min-width:0;font:600 44px/1.1 system-ui,-apple-system,sans-serif;
+  letter-spacing:-.02em;color:var(--ink);background:transparent;border:0;
+  border-bottom:2px solid var(--eixo);padding:4px 0;width:100%}
+#peso:focus{outline:none;border-bottom-color:var(--acento)}
+#peso::placeholder{color:var(--grade)}
+.un{font-size:20px;font-weight:600;color:var(--ink-3)}
+.dica{font-size:13px;color:var(--ink-3);margin-top:10px}
+
+.btn{display:block;width:100%;font:600 17px system-ui,sans-serif;color:#fff;
+  background:var(--acento);border:0;border-radius:14px;padding:16px;cursor:pointer;
+  -webkit-tap-highlight-color:transparent}
+.btn:disabled{opacity:.5;cursor:default}
+.btn:active:not(:disabled){transform:translateY(1px)}
+.btn-2{background:var(--superficie);color:var(--ink);border:1px solid var(--borda);font-weight:500}
+
+#fotoBox{position:relative}
+#fotoInput{position:absolute;inset:0;opacity:0;width:100%;height:100%}
+#previa{display:block;width:100%;max-height:210px;object-fit:cover;border-radius:11px;margin-top:12px}
+.fotoNota{font-size:13px;color:var(--ink-3);margin-top:10px}
+
+#aviso{border-radius:13px;padding:13px 15px;font-size:14px;margin-bottom:14px}
+.ok{border:1px solid color-mix(in srgb,var(--ok) 40%,var(--borda));
+  background:color-mix(in srgb,var(--ok) 9%,var(--superficie))}
+.erro{border:1px solid color-mix(in srgb,var(--critico) 40%,var(--borda));
+  background:color-mix(in srgb,var(--critico) 9%,var(--superficie))}
+
+table{width:100%;border-collapse:collapse;font-size:14px}
+th,td{text-align:left;padding:9px 0;border-top:1px solid var(--grade)}
+thead th{border-top:0;font-size:11px;text-transform:uppercase;letter-spacing:.05em;
+  color:var(--ink-3);font-weight:600}
+td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
+.sobe{color:var(--ok);font-weight:600}
+.desce{color:var(--acento);font-weight:600}
+.vazio{color:var(--ink-3);text-align:center;padding:20px 0}
+.pe{text-align:center;font-size:13px;color:var(--ink-3);margin-top:18px}
+.pe a{color:var(--azul)}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+
+<div class="topo">
+  <span class="marca" aria-hidden="true">⚖️</span>
+  <div>
+    <h1>Pesar a colmeia</h1>
+    <p class="sub" id="sub">colmeia-01</p>
+  </div>
+</div>
+
+<div id="aviso" hidden role="status" aria-live="polite"></div>
+
+<form id="form" class="cartao">
+  <label class="rot" for="peso">Peso na balança</label>
+  <div class="pesoLinha">
+    <input id="peso" type="text" inputmode="decimal" autocomplete="off"
+           placeholder="0000" aria-describedby="dica" required>
+    <span class="un">g</span>
+  </div>
+  <p class="dica" id="dica">Peso bruto, caixa mais colônia.</p>
+</form>
+
+<div class="cartao" id="fotoBox">
+  <label class="rot" for="fotoInput">Foto</label>
+  <button class="btn btn-2" type="button" id="fotoBtn">Tirar foto</button>
+  <input id="fotoInput" type="file" accept="image/*" capture="environment" aria-label="Tirar foto">
+  <img id="previa" hidden alt="Prévia da foto">
+  <p class="fotoNota" id="fotoNota">Opcional. A foto é reduzida antes de subir.</p>
+</div>
+
+<button class="btn" id="enviar" type="button">Registrar pesagem</button>
+
+<div class="cartao" style="margin-top:14px">
+  <label class="rot">Últimas pesagens</label>
+  <table>
+    <thead><tr><th>Quando</th><th class="num">Peso</th><th class="num">Variação</th></tr></thead>
+    <tbody id="hist"><tr><td colspan="3" class="vazio">Carregando…</td></tr></tbody>
+  </table>
+</div>
+
+<p class="pe"><a href="./">Voltar para o painel</a></p>
+
+<script src="config.js"></script>
+<script>
+(() => {
+  "use strict";
+  const C = window.CONFIG;
+  const REST = C.supabaseUrl.replace(/\/+$/,"") + "/rest/v1";
+  const STOR = C.supabaseUrl.replace(/\/+$/,"") + "/storage/v1/object";
+  const BUCKET_FOTO = "fotos-colmeia";
+  const DISPOSITIVO = "colmeia-01";
+  let chave = C.supabaseKey;
+  let arquivo = null;
+
+  const $ = (id) => document.getElementById(id);
+  const fmt = new Intl.DateTimeFormat("pt-BR",{day:"2-digit",month:"2-digit",hour:"2-digit",minute:"2-digit"});
+
+  function cab(extra) {
+    return Object.assign({ apikey: chave, Authorization: "Bearer " + chave }, extra || {});
+  }
+  function aviso(txt, tipo) {
+    const el = $("aviso");
+    el.className = tipo; el.innerHTML = txt; el.hidden = false;
+    if (tipo === "ok") setTimeout(() => { el.hidden = true; }, 6000);
+  }
+
+  // Reduz a foto antes de subir. Celular tira de 3 a 5 MB; isso vira ~250 KB,
+  // o que importa porque o bucket divide a mesma cota de 1 GB com os audios.
+  function reduzir(file, maxLado = 1280, q = 0.82) {
+    return new Promise((ok, err) => {
+      const img = new Image();
+      img.onload = () => {
+        const e = Math.min(1, maxLado / Math.max(img.width, img.height));
+        const cv = document.createElement("canvas");
+        cv.width = Math.round(img.width * e); cv.height = Math.round(img.height * e);
+        cv.getContext("2d").drawImage(img, 0, 0, cv.width, cv.height);
+        cv.toBlob(b => b ? ok(b) : err(new Error("falha ao converter")), "image/jpeg", q);
+        URL.revokeObjectURL(img.src);
+      };
+      img.onerror = () => err(new Error("nao consegui ler a imagem"));
+      img.src = URL.createObjectURL(file);
+    });
+  }
+
+  function nomeFoto() {
+    const d = new Date(), p = n => String(n).padStart(2,"0");
+    return `foto_${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}T${p(d.getHours())}-${p(d.getMinutes())}-${p(d.getSeconds())}.jpg`;
+  }
+
+  $("fotoBtn").addEventListener("click", () => $("fotoInput").click());
+  $("fotoInput").addEventListener("change", async (e) => {
+    const f = e.target.files && e.target.files[0];
+    if (!f) return;
+    try {
+      const b = await reduzir(f);
+      arquivo = b;
+      $("previa").src = URL.createObjectURL(b);
+      $("previa").hidden = false;
+      $("fotoBtn").textContent = "Trocar foto";
+      $("fotoNota").textContent = `${(f.size/1e6).toFixed(1)} MB reduzido para ${(b.size/1024).toFixed(0)} KB.`;
+    } catch (err) {
+      arquivo = null;
+      aviso("Não consegui preparar a foto: " + err.message + ". Dá para registrar o peso sem ela.", "erro");
+    }
+  });
+
+  $("enviar").addEventListener("click", async () => {
+    const bruto = $("peso").value.replace(/\s/g,"").replace(",",".");
+    const peso = Number(bruto);
+    if (!bruto || !isFinite(peso) || peso < 1 || peso > 100000) {
+      aviso("Digite o peso em gramas, entre 1 e 100000.", "erro");
+      $("peso").focus();
+      return;
+    }
+    const btn = $("enviar");
+    btn.disabled = true; btn.textContent = "Enviando…";
+
+    let foto = null;
+    if (arquivo) {
+      const nome = nomeFoto();
+      try {
+        const r = await fetch(`${STOR}/${BUCKET_FOTO}/${nome}`, {
+          method: "POST", headers: cab({ "Content-Type": "image/jpeg" }), body: arquivo
+        });
+        if (r.ok) foto = nome;
+        else aviso("A foto não subiu (HTTP " + r.status + "), mas vou registrar o peso mesmo assim.", "erro");
+      } catch (e) {
+        aviso("A foto não subiu, mas vou registrar o peso mesmo assim.", "erro");
+      }
+    }
+
+    try {
+      const corpo = { dispositivo: DISPOSITIVO, peso_g: peso };
+      if (foto) corpo.foto_nome = foto;
+      const r = await fetch(`${REST}/pesagens`, {
+        method: "POST",
+        headers: cab({ "Content-Type": "application/json", Prefer: "return=minimal" }),
+        body: JSON.stringify(corpo)
+      });
+      if (!r.ok) throw new Error("HTTP " + r.status + " " + (await r.text()).slice(0,140));
+      aviso(`<strong>Registrado:</strong> ${peso.toLocaleString("pt-BR")} g${foto ? " com foto" : ""}.`, "ok");
+      $("peso").value = ""; arquivo = null;
+      $("previa").hidden = true; $("fotoBtn").textContent = "Tirar foto";
+      $("fotoNota").textContent = "Opcional. A foto é reduzida antes de subir.";
+      carregar();
+    } catch (e) {
+      aviso("<strong>Não consegui registrar.</strong><br>" + String(e.message).replace(/[<>&]/g,""), "erro");
+    } finally {
+      btn.disabled = false; btn.textContent = "Registrar pesagem";
+    }
+  });
+
+  async function carregar() {
+    const corpo = $("hist");
+    try {
+      const r = await fetch(`${REST}/pesagens?select=criado_em,peso_g,foto_nome&order=criado_em.desc&limit=8`,
+                            { headers: cab(), cache: "no-store" });
+      if (!r.ok) throw new Error("HTTP " + r.status);
+      const linhas = (await r.json())
+        .map((l) => ({ ...l, t: new Date(String(l.criado_em).replace(" ", "T")) }))
+        .filter((l) => !Number.isNaN(l.t.getTime()))
+        // ordena aqui em vez de confiar no order= da query: se a ordem vier
+        // trocada, a coluna de variacao inverte de sinal sem dar erro nenhum.
+        .sort((a, b) => b.t - a.t);
+      corpo.textContent = "";
+      if (!linhas.length) {
+        corpo.innerHTML = '<tr><td colspan="3" class="vazio">Nenhuma pesagem ainda.</td></tr>';
+        return;
+      }
+      linhas.forEach((l, i) => {
+        const ant = linhas[i+1];
+        const d = ant ? l.peso_g - ant.peso_g : null;
+        const tr = document.createElement("tr");
+        const t1 = document.createElement("td");
+        t1.textContent = fmt.format(l.t);
+        if (l.foto_nome) {
+          t1.append(" ");
+          const a = document.createElement("a");
+          a.href = `${STOR.replace("/object", "/object/public")}/${BUCKET_FOTO}/${encodeURIComponent(l.foto_nome)}`;
+          a.target = "_blank"; a.rel = "noopener";
+          a.textContent = "📷";
+          a.setAttribute("aria-label", "Ver a foto desta pesagem");
+          t1.appendChild(a);
+        }
+        const t2 = document.createElement("td"); t2.className = "num";
+        t2.textContent = l.peso_g.toLocaleString("pt-BR",{maximumFractionDigits:1}) + " g";
+        const t3 = document.createElement("td"); t3.className = "num";
+        if (d === null) t3.textContent = "—";
+        else {
+          t3.textContent = (d >= 0 ? "+" : "") + d.toLocaleString("pt-BR",{maximumFractionDigits:1}) + " g";
+          t3.classList.add(d >= 0 ? "sobe" : "desce");
+        }
+        tr.append(t1,t2,t3); corpo.appendChild(tr);
+      });
+    } catch (e) {
+      corpo.innerHTML = '<tr><td colspan="3" class="vazio">Não consegui carregar o histórico.</td></tr>';
+    }
+  }
+
+  carregar();
+})();
+</script>
+</body>
+</html>

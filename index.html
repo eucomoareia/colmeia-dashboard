@@ -33,6 +33,9 @@
       <button class="btn-icone" id="btnTema" type="button" aria-label="Alternar tema claro e escuro" title="Alternar tema">
         <span aria-hidden="true" id="btnTemaIcone">◐</span>
       </button>
+      <a class="btn-icone" href="pesar.html" aria-label="Registrar pesagem" title="Registrar pesagem">
+        <span aria-hidden="true">⚖️</span>
+      </a>
       <button class="btn-icone" id="btnAtualizar" type="button" aria-label="Atualizar agora" title="Atualizar agora">
         <span aria-hidden="true">↻</span>
       </button>
@@ -72,6 +75,11 @@
       <p class="tile-sub" id="sDb">—</p>
     </article>
     <article class="tile">
+      <p class="tile-rot">Peso</p>
+      <p class="tile-valor"><span id="vPeso">—</span><span class="tile-un">g</span></p>
+      <p class="tile-sub" id="sPeso">—</p>
+    </article>
+    <article class="tile">
       <p class="tile-rot">Leituras no periodo</p>
       <p class="tile-valor"><span id="vTotal">—</span></p>
       <p class="tile-sub" id="sTotal">—</p>
@@ -99,6 +107,13 @@
         <p class="card-sub" id="subDb">dBFS, pico do clipe</p>
       </header>
       <div class="grafico" id="gDb" data-serie="db"></div>
+    </article>
+    <article class="card">
+      <header class="card-cab">
+        <h2><span class="chave" data-serie="peso" aria-hidden="true"></span>Peso da caixa</h2>
+        <p class="card-sub" id="subPeso">pesagem manual</p>
+      </header>
+      <div class="grafico" id="gPeso" data-serie="peso"></div>
     </article>
   </section>
 

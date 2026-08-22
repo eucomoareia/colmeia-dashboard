@@ -13,6 +13,7 @@
     horas: 24,
     dispositivo: "",
     linhas: [],
+    pesagens: [],
     dispositivos: [],
     mostrando: PAGINA_TABELA,
     soComAudio: false,
@@ -72,6 +73,15 @@
     return r.json();
   }
 
+  async function buscarPesagens(chave) {
+    const r = await fetch(REST + "/pesagens?select=criado_em,peso_g,foto_nome&order=criado_em.asc&limit=2000", {
+      headers: { apikey: chave, Authorization: "Bearer " + chave, Accept: "application/json" },
+      cache: "no-store"
+    });
+    if (!r.ok) throw new Error("HTTP " + r.status);
+    return r.json();
+  }
+
   async function carregar({ silencioso = false } = {}) {
     if (!silencioso) mostrarCarregando();
     try {
@@ -90,6 +100,17 @@
       estado.linhas = dados
         .map((l) => ({ ...l, t: comoData(l.criado_em) }))
         .sort((a, b) => a.t - b.t);
+      // Pesagem e manual e esparsa, entao ignora o filtro de periodo e carrega
+      // sempre o historico inteiro. Falha aqui nao derruba o resto do painel.
+      try {
+        estado.pesagens = (await buscarPesagens(estado.chave))
+          .map((p) => ({ ...p, t: comoData(p.criado_em) }))
+          .filter((p) => !Number.isNaN(p.t.getTime()))
+          // ordena aqui em vez de confiar no order= da query: com a ordem
+          // trocada, o tile mostraria a pesagem mais antiga como se fosse a
+          // atual e o delta inverteria de sinal, sem erro nenhum aparecer.
+          .sort((a, b) => a.t - b.t);
+      } catch (e) { estado.pesagens = []; }
       esconderAlerta();
       render();
     } catch (e) {
@@ -170,9 +191,29 @@
       $(idS).textContent = partes.join(" · ");
     }
 
+    renderTilePeso();
+
     const comAudio = linhas.filter((l) => l.audio_nome).length;
     $("vTotal").textContent = linhas.length.toLocaleString("pt-BR");
     $("sTotal").textContent = comAudio + " com clipe de audio";
+  }
+
+  function renderTilePeso() {
+    const ps = estado.pesagens;
+    if (!ps.length) {
+      $("vPeso").textContent = "—";
+      $("sPeso").textContent = "nenhuma pesagem registrada";
+      return;
+    }
+    const ult = ps[ps.length - 1];
+    const ant = ps.length > 1 ? ps[ps.length - 2] : null;
+    $("vPeso").textContent = num(ult.peso_g, 0);
+    const partes = [fmtDia.format(ult.t)];
+    if (ant) {
+      const d = ult.peso_g - ant.peso_g;
+      partes.push((d >= 0 ? "+" : "") + num(d, 0) + " g desde a anterior");
+    }
+    $("sPeso").textContent = partes.join(" · ");
   }
 
   /* ---------------- grafico ---------------- */
@@ -218,9 +259,10 @@
     return { lo, hi, ticks };
   }
 
-  function desenhar(container, campo, cor, un, casas) {
+  function desenhar(container, campo, cor, un, casas, fonte) {
     container.textContent = "";
-    const brutos = estado.linhas.map((l) => {
+    const origem = fonte || estado.linhas;
+    const brutos = origem.map((l) => {
       let v = l[campo];
       if (v === null || v === undefined) v = null;
       if (campo === "db" && v !== null && v <= C.pisoRuidoDb) v = null;
@@ -296,6 +338,13 @@
       svg.appendChild(el("path", { class: "g-linha", d, stroke: cor }));
     }
 
+    // serie esparsa (pesagem manual): marca cada ponto, senao some entre os pixels
+    if (validos.length <= 40) {
+      for (const p of validos) {
+        svg.appendChild(el("circle", { class: "g-ponto", cx: px(p.x), cy: py(p.y), r: 3.5, fill: cor }));
+      }
+    }
+
     // rotulo direto no ultimo valor
     const ult = validos[validos.length - 1];
     svg.appendChild(el("circle", { class: "g-ponto", cx: px(ult.x), cy: py(ult.y), r: 4.5, fill: cor }));
@@ -347,6 +396,14 @@
     desenhar($("gTemp"), "temp", cs.getPropertyValue("--serie-temp").trim(), "°C", 1);
     desenhar($("gUmid"), "umidade", cs.getPropertyValue("--serie-umidade").trim(), "%", 1);
     desenhar($("gDb"), "db", cs.getPropertyValue("--serie-db").trim(), "dBFS", 1);
+
+    const gp = $("gPeso");
+    if (gp) {
+      desenhar(gp, "peso_g", cs.getPropertyValue("--serie-peso").trim(), "g", 0, estado.pesagens);
+      $("subPeso").textContent = estado.pesagens.length
+        ? estado.pesagens.length + " pesagem(ns) manuais · historico completo, fora do filtro de periodo"
+        : "registre a primeira em pesar.html";
+    }
 
     const semSinal = estado.linhas.filter((l) => l.db !== null && l.db <= C.pisoRuidoDb).length;
     $("subDb").textContent = "dBFS, pico do clipe" + (semSinal ? " · " + semSinal + " leitura(s) sem sinal do microfone foram omitidas" : "");
