@@ -1,55 +1,44 @@
 # Painel da colmeia
 
-Site estatico que le a telemetria da colmeia direto do Supabase, no navegador, e mostra:
+Site estático que mostra os dados coletados por um nó IoT dentro de uma caixa de jataí
+(*Tetragonisca angustula*) em Marabá, PA, de 22/08 a 10/09/2026:
 
-- estado atual (temperatura, umidade, nivel sonoro, contagem de leituras);
-- graficos de linha das tres series, com cursor e tooltip;
-- tabela das leituras recentes, com player para os clipes de audio do bucket.
+- resumo do período (temperatura, umidade, nível sonoro, número de leituras);
+- gráficos das três séries, com os eventos registrados marcados por linha tracejada;
+- lista dos eventos (aberturas da caixa e intervenções);
+- tabela das leituras, com player para os clipes de áudio.
 
-Sem build, sem framework, sem servidor: sao quatro arquivos estaticos.
+Sem build, sem framework, sem servidor. A coleta terminou e o Supabase foi pausado,
+então os dados agora ficam no próprio repositório.
 
-## Como funciona
+## Dados
 
-O navegador chama a API REST do Supabase (PostgREST) com a chave publica do projeto:
+| Arquivo | Conteúdo |
+|---|---|
+| `dados/leituras.csv` | uma linha por leitura: `t` (horário Unix, em segundos), `temp` (°C), `umidade` (%), `db` (dBFS) e `audio` (nome do clipe gravado naquela leitura, quando houver) |
+| `dados/eventos.json` | eventos registrados: horário, tipo, se a caixa foi aberta, duração e descrição |
+| `dados/audios/` | clipes WAV de 2 s, 16 kHz, gravados a cada 7 min |
 
-```
-GET {SUPABASE_URL}/rest/v1/leituras?select=...&order=criado_em.desc&limit=5000
-     apikey: {chave publica}
-```
+São 28.032 leituras e 1.233 clipes. Os horários são mostrados no fuso de Marabá (UTC-3).
 
-Isso so funciona porque a tabela `leituras` tem uma policy de RLS de leitura
-publica (`SELECT` liberado para o papel `anon`). A chave publishable/anon nao da
-acesso a nada alem do que as policies permitirem. **Nunca coloque a
-`service_role` key neste repositorio** - ela ignora RLS e ficaria visivel para
-qualquer visitante.
+## Períodos
 
-Os audios vem do bucket publico `audio-colmeia`, montando a URL:
+Os botões de período contam a partir da última leitura da coleta, não da hora atual:
 
-```
-{SUPABASE_URL}/storage/v1/object/public/audio-colmeia/{audio_nome}
-```
-
-Leituras com `db <= -120` sao tratadas como "microfone sem sinal": ficam de fora
-dos graficos e das estatisticas, e aparecem como *sem sinal* na tabela.
+- **Tudo**: a coleta inteira;
+- **5 primeiros dias** e **5 últimos dias**: as duas janelas comparadas no TCC
+  (22/08 17h42 a 27/08 23h59 e 06/09 0h00 a 10/09 18h00);
+- **7 d finais** e **24 h finais**: o fim da coleta.
 
 ## Arquivos
 
 | Arquivo | O que faz |
 |---|---|
-| `index.html` | estrutura da pagina |
-| `styles.css` | tema claro/escuro, layout, tokens de cor |
-| `app.js` | busca os dados, desenha os graficos em SVG e monta a tabela |
-| `config.js` | URL do projeto, chave publica e ajustes (periodo, refresh, piso de ruido) |
-
-## Ajustes rapidos
-
-Tudo que costuma mudar esta em `config.js`:
-
-- `titulo` - nome que aparece no topo e na aba;
-- `segundosRefresh` - de quanto em quanto tempo recarrega (0 desliga);
-- `minutosParaOffline` - a partir de quando o dispositivo aparece como offline;
-- `pisoRuidoDb` - abaixo disso, a leitura de ruido conta como sem sinal;
-- `limiteLinhas` - teto de linhas por consulta.
+| `index.html` | estrutura da página |
+| `styles.css` | tema claro/escuro, layout, cores |
+| `app.js` | lê os arquivos de `dados/`, desenha os gráficos em SVG e monta a tabela |
+| `config.js` | caminhos dos dados, fuso, janelas e ajustes |
+| `pesar.html` | página antiga de pesagem manual; dependia do Supabase e não funciona mais |
 
 ## Rodando local
 
@@ -58,27 +47,10 @@ python3 -m http.server 8000
 # abra http://localhost:8000
 ```
 
-Abrir o `index.html` por `file://` nao funciona por causa de CORS: use um
-servidor local.
+Abrir o `index.html` direto do disco (`file://`) não funciona, porque o navegador
+bloqueia a leitura dos arquivos de `dados/`. Use um servidor local.
 
 ## Publicando
 
-O repositorio ja esta ligado ao GitHub Pages (branch `main`, pasta raiz).
-Cada push na `main` republica o site em alguns segundos.
-
-Se o painel abrir e mostrar erro de conexao, confira em
-**Supabase → Project Settings → API → CORS** se o dominio do Pages esta liberado.
-
-## Esquema esperado
-
-```sql
-create table public.leituras (
-  id          bigint generated always as identity primary key,
-  criado_em   timestamptz not null default now(),
-  dispositivo text not null default 'colmeia-01',
-  temp        real,
-  umidade     real,
-  db          real,
-  audio_nome  text
-);
-```
+O repositório está ligado ao GitHub Pages (branch `main`, pasta raiz). Cada push na
+`main` republica o site em alguns segundos.

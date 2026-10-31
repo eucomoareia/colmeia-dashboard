@@ -1,0 +1,51 @@
+[
+ {
+  "t": 1787431320,
+  "tipo": "manejo",
+  "caixa_aberta": true,
+  "duracao_min": null,
+  "descricao": "Transferência da colônia para a caixa instrumentada. Marco zero da série."
+ },
+ {
+  "t": 1787666340,
+  "tipo": "manutenção",
+  "caixa_aberta": true,
+  "duracao_min": 55.6,
+  "descricao": "Manutenção na caixa. Telemetria interrompida das 10h59 às 11h55."
+ },
+ {
+  "t": 1787670000,
+  "tipo": "calibração",
+  "caixa_aberta": true,
+  "duracao_min": null,
+  "descricao": "Verificação da temperatura interna com termômetro clínico digital."
+ },
+ {
+  "t": 1788369780,
+  "tipo": "manutenção",
+  "caixa_aberta": true,
+  "duracao_min": 6.0,
+  "descricao": "Abertura para inspeção e limpeza dos sensores. Removidos cerume e própolis."
+ },
+ {
+  "t": 1788526800,
+  "tipo": "observação",
+  "caixa_aberta": false,
+  "duracao_min": null,
+  "descricao": "Início do forrageamento observado às 10h. Manhã encoberta."
+ },
+ {
+  "t": 1788539400,
+  "tipo": "desligamento",
+  "caixa_aberta": false,
+  "duracao_min": 134.3,
+  "descricao": "Desligamento proposital por causa de um ruído externo forte."
+ },
+ {
+  "t": 1788547320,
+  "tipo": "manutenção",
+  "caixa_aberta": true,
+  "duracao_min": null,
+  "descricao": "Abertura para limpeza apenas do DHT22. O microfone não foi tocado."
+ }
+]

@@ -2,30 +2,28 @@
   "use strict";
 
   const C = window.CONFIG;
-  const REST = C.supabaseUrl.replace(/\/+$/, "") + "/rest/v1";
-  const AUDIO_BASE = C.supabaseUrl.replace(/\/+$/, "") + "/storage/v1/object/public/" + C.bucket + "/";
-  const COLUNAS = "id,criado_em,dispositivo,temp,umidade,db,audio_nome";
-  const MAX_PONTOS = 220;
+  const AUDIO_BASE = C.pastaAudios;
+  const MAX_PONTOS = 600;
   const PAGINA_TABELA = 25;
 
   const $ = (id) => document.getElementById(id);
   const estado = {
-    horas: 24,
-    dispositivo: "",
+    horas: 0,
+    janela: "",
+    todas: null,
+    eventos: [],
     linhas: [],
-    pesagens: [],
-    dispositivos: [],
     mostrando: PAGINA_TABELA,
-    soComAudio: false,
-    chave: C.supabaseKey,
-    timer: null
+    soComAudio: false
   };
 
   /* ---------------- formatacao ---------------- */
-  const fmtHora = new Intl.DateTimeFormat("pt-BR", { hour: "2-digit", minute: "2-digit" });
-  const fmtDataHora = new Intl.DateTimeFormat("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit" });
-  const fmtDiaHora = new Intl.DateTimeFormat("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
-  const fmtDia = new Intl.DateTimeFormat("pt-BR", { day: "2-digit", month: "2-digit" });
+  const TZ = { timeZone: C.fuso };
+  const fmtHora = new Intl.DateTimeFormat("pt-BR", { ...TZ, hour: "2-digit", minute: "2-digit" });
+  const fmtDataHora = new Intl.DateTimeFormat("pt-BR", { ...TZ, day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit" });
+  const fmtDiaHora = new Intl.DateTimeFormat("pt-BR", { ...TZ, day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
+  const fmtDia = new Intl.DateTimeFormat("pt-BR", { ...TZ, day: "2-digit", month: "2-digit" });
+  const fmtDataCompleta = new Intl.DateTimeFormat("pt-BR", { ...TZ, day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" });
 
   const num = (v, casas = 1) =>
     v === null || v === undefined || Number.isNaN(v) ? "—" : v.toLocaleString("pt-BR", { minimumFractionDigits: casas, maximumFractionDigits: casas });
@@ -49,68 +47,56 @@
   }
 
   /* ---------------- dados ---------------- */
-  async function buscar(chave) {
-    const p = new URLSearchParams();
-    p.set("select", COLUNAS);
-    p.set("order", "criado_em.desc");
-    p.set("limit", String(C.limiteLinhas));
-    if (estado.horas > 0) {
-      const desde = new Date(Date.now() - estado.horas * 3600 * 1000).toISOString();
-      p.set("criado_em", "gte." + desde);
-    }
-    if (estado.dispositivo) p.set("dispositivo", "eq." + estado.dispositivo);
-
-    const r = await fetch(REST + "/" + C.table + "?" + p.toString(), {
-      headers: { apikey: chave, Authorization: "Bearer " + chave, Accept: "application/json" },
-      cache: "no-store"
+  // Os dados ficam no repositorio: um CSV com as leituras e um JSON com os eventos.
+  async function baixarTudo() {
+    const r = await fetch(C.arquivoLeituras, { cache: "force-cache" });
+    if (!r.ok) throw new Error("HTTP " + r.status + " ao ler " + C.arquivoLeituras);
+    const texto = await r.text();
+    const linhas = texto.trim().split(/\r?\n/);
+    const cab = linhas.shift().split(",");
+    const ix = Object.fromEntries(cab.map((c, i) => [c, i]));
+    const n = (s) => (s === "" || s === undefined ? null : Number(s));
+    estado.todas = linhas.map((l) => {
+      const c = l.split(",");
+      return {
+        t: new Date(Number(c[ix.t]) * 1000),
+        dispositivo: C.dispositivo,
+        temp: n(c[ix.temp]),
+        umidade: n(c[ix.umidade]),
+        db: n(c[ix.db]),
+        audio_nome: c[ix.audio] || null
+      };
     });
-    if (!r.ok) {
-      const corpo = await r.text().catch(() => "");
-      const e = new Error("HTTP " + r.status + " " + r.statusText + (corpo ? " — " + corpo.slice(0, 200) : ""));
-      e.status = r.status;
-      throw e;
-    }
-    return r.json();
-  }
-
-  async function buscarPesagens(chave) {
-    const r = await fetch(REST + "/pesagens?select=criado_em,peso_g,foto_nome&order=criado_em.asc&limit=2000", {
-      headers: { apikey: chave, Authorization: "Bearer " + chave, Accept: "application/json" },
-      cache: "no-store"
-    });
-    if (!r.ok) throw new Error("HTTP " + r.status);
-    return r.json();
-  }
-
-  async function carregar({ silencioso = false } = {}) {
-    if (!silencioso) mostrarCarregando();
     try {
-      let dados;
-      try {
-        dados = await buscar(estado.chave);
-      } catch (e) {
-        // Se a chave publishable for recusada, tenta a anon legada uma vez.
-        if ((e.status === 401 || e.status === 403) && estado.chave !== C.supabaseKeyFallback && C.supabaseKeyFallback) {
-          estado.chave = C.supabaseKeyFallback;
-          dados = await buscar(estado.chave);
-        } else {
-          throw e;
-        }
+      const re = await fetch(C.arquivoEventos, { cache: "force-cache" });
+      estado.eventos = re.ok ? (await re.json()).map((e) => ({ ...e, t: new Date(e.t * 1000) })) : [];
+    } catch (e) { estado.eventos = []; }
+  }
+
+  function filtrar() {
+    const todas = estado.todas;
+    if (!todas.length) return [];
+    if (estado.janela) {
+      const j = C.janelas[estado.janela];
+      const a = new Date(j.ini).getTime(), b = new Date(j.fim).getTime();
+      return todas.filter((l) => l.t.getTime() >= a && l.t.getTime() <= b);
+    }
+    if (estado.horas > 0) {
+      // periodo contado a partir da ultima leitura da coleta, nao de agora
+      const fim = todas[todas.length - 1].t.getTime();
+      const desde = fim - estado.horas * 3600 * 1000;
+      return todas.filter((l) => l.t.getTime() >= desde);
+    }
+    return todas;
+  }
+
+  async function carregar() {
+    try {
+      if (!estado.todas) {
+        mostrarCarregando();
+        await baixarTudo();
       }
-      estado.linhas = dados
-        .map((l) => ({ ...l, t: comoData(l.criado_em) }))
-        .sort((a, b) => a.t - b.t);
-      // Pesagem e manual e esparsa, entao ignora o filtro de periodo e carrega
-      // sempre o historico inteiro. Falha aqui nao derruba o resto do painel.
-      try {
-        estado.pesagens = (await buscarPesagens(estado.chave))
-          .map((p) => ({ ...p, t: comoData(p.criado_em) }))
-          .filter((p) => !Number.isNaN(p.t.getTime()))
-          // ordena aqui em vez de confiar no order= da query: com a ordem
-          // trocada, o tile mostraria a pesagem mais antiga como se fosse a
-          // atual e o delta inverteria de sinal, sem erro nenhum aparecer.
-          .sort((a, b) => a.t - b.t);
-      } catch (e) { estado.pesagens = []; }
+      estado.linhas = filtrar();
       esconderAlerta();
       render();
     } catch (e) {
@@ -120,15 +106,12 @@
 
   function mostrarAlerta(e) {
     const el = $("alerta");
-    const rede = e instanceof TypeError;
-    el.innerHTML =
-      "<strong>Nao consegui carregar os dados.</strong><br>" +
-      (rede
-        ? "O navegador nao conseguiu falar com o Supabase. Confira se o projeto esta ativo e se o dominio esta liberado no CORS."
-        : "Resposta do Supabase: <code>" + String(e.message).replace(/[<>&]/g, "") + "</code>. Confira a chave em <code>config.js</code> e a policy de leitura publica na tabela <code>" + C.table + "</code>.");
+    el.innerHTML = "<strong>Nao consegui carregar os dados.</strong><br>" +
+      "Confira se o arquivo <code>" + C.arquivoLeituras + "</code> esta no repositorio. Detalhe: <code>" +
+      String(e.message).replace(/[<>&]/g, "") + "</code>. Abrindo o index.html direto do disco o navegador bloqueia a leitura; use um servidor local.";
     el.hidden = false;
     $("statusDot").className = "dot dot-off";
-    $("statusTexto").textContent = "Sem conexao com o banco";
+    $("statusTexto").textContent = "Dados nao carregados";
   }
   function esconderAlerta() { $("alerta").hidden = true; }
 
@@ -166,11 +149,11 @@
       return;
     }
 
-    const idadeMin = (Date.now() - ultima.t.getTime()) / 60000;
-    const online = idadeMin <= C.minutosParaOffline;
-    $("statusDot").className = "dot " + (online ? "dot-on" : "dot-off");
+    const todas = estado.todas;
+    $("statusDot").className = "dot dot-idle";
     $("statusTexto").textContent =
-      (online ? "Recebendo dados" : "Sem dados novos") + " · ultima leitura " + haQuanto(ultima.t) + " (" + fmtDataHora.format(ultima.t) + ")";
+      "Coleta encerrada · " + fmtDataCompleta.format(todas[0].t) + " a " + fmtDataCompleta.format(todas[todas.length - 1].t) +
+      " · " + todas.length.toLocaleString("pt-BR") + " leituras";
 
     const par = [
       ["temp", "vTemp", "sTemp", 1, "°C"],
@@ -191,29 +174,9 @@
       $(idS).textContent = partes.join(" · ");
     }
 
-    renderTilePeso();
-
     const comAudio = linhas.filter((l) => l.audio_nome).length;
     $("vTotal").textContent = linhas.length.toLocaleString("pt-BR");
     $("sTotal").textContent = comAudio + " com clipe de audio";
-  }
-
-  function renderTilePeso() {
-    const ps = estado.pesagens;
-    if (!ps.length) {
-      $("vPeso").textContent = "—";
-      $("sPeso").textContent = "nenhuma pesagem registrada";
-      return;
-    }
-    const ult = ps[ps.length - 1];
-    const ant = ps.length > 1 ? ps[ps.length - 2] : null;
-    $("vPeso").textContent = num(ult.peso_g, 0);
-    const partes = [fmtDia.format(ult.t)];
-    if (ant) {
-      const d = ult.peso_g - ant.peso_g;
-      partes.push((d >= 0 ? "+" : "") + num(d, 0) + " g desde a anterior");
-    }
-    $("sPeso").textContent = partes.join(" · ");
   }
 
   /* ---------------- grafico ---------------- */
@@ -237,9 +200,11 @@
     return [...baldes.keys()].sort((a, b) => a - b).map((k) => {
       const g = baldes.get(k);
       const validos = g.filter((p) => p.y !== null);
+      // balde que contem um buraco vira buraco, para a lacuna continuar visivel
+      const buraco = g.some((p) => p.y === null);
       return {
         x: g[Math.floor(g.length / 2)].x,
-        y: validos.length ? validos.reduce((a, p) => a + p.y, 0) / validos.length : null,
+        y: !buraco && validos.length ? validos.reduce((a, p) => a + p.y, 0) / validos.length : null,
         n: g.length
       };
     });
@@ -268,7 +233,13 @@
       if (campo === "db" && v !== null && v <= C.pisoRuidoDb) v = null;
       return { x: l.t.getTime(), y: v };
     });
-    const pontos = reduzir(brutos, MAX_PONTOS);
+    // lacunas de mais de 1 h viram buraco no grafico, em vez de uma reta ligando as pontas
+    const comBuracos = [];
+    for (let i = 0; i < brutos.length; i++) {
+      if (i && brutos[i].x - brutos[i - 1].x > 3600 * 1000) comBuracos.push({ x: brutos[i - 1].x + 1, y: null });
+      comBuracos.push(brutos[i]);
+    }
+    const pontos = reduzir(comBuracos, MAX_PONTOS);
     const validos = pontos.filter((p) => p.y !== null);
 
     if (validos.length < 2) {
@@ -316,6 +287,16 @@
       const tx = el("text", { class: "g-tick", x: px(x), y: m.t + ih + 16, "text-anchor": i === 0 ? "start" : i === nTicks - 1 ? "end" : "middle" });
       tx.textContent = fmtX.format(new Date(x));
       svg.appendChild(tx);
+    }
+
+    // eventos registrados: linha vertical tracejada
+    for (const ev of estado.eventos) {
+      const x = ev.t.getTime();
+      if (x < x0 || x > x1) continue;
+      const ln = el("line", { class: "g-evento", x1: px(x), x2: px(x), y1: m.t, y2: m.t + ih });
+      const tt = el("title", {}); tt.textContent = fmtDiaHora.format(ev.t) + " · " + ev.tipo;
+      ln.appendChild(tt);
+      svg.appendChild(ln);
     }
 
     // segmentos continuos (buracos onde nao ha valor)
@@ -397,16 +378,8 @@
     desenhar($("gUmid"), "umidade", cs.getPropertyValue("--serie-umidade").trim(), "%", 1);
     desenhar($("gDb"), "db", cs.getPropertyValue("--serie-db").trim(), "dBFS", 1);
 
-    const gp = $("gPeso");
-    if (gp) {
-      desenhar(gp, "peso_g", cs.getPropertyValue("--serie-peso").trim(), "g", 0, estado.pesagens);
-      $("subPeso").textContent = estado.pesagens.length
-        ? estado.pesagens.length + " pesagem(ns) manuais · historico completo, fora do filtro de periodo"
-        : "registre a primeira em pesar.html";
-    }
-
     const semSinal = estado.linhas.filter((l) => l.db !== null && l.db <= C.pisoRuidoDb).length;
-    $("subDb").textContent = "dBFS, pico do clipe" + (semSinal ? " · " + semSinal + " leitura(s) sem sinal do microfone foram omitidas" : "");
+    $("subDb").textContent = "dBFS, nível calculado no aparelho" + (semSinal ? " · " + semSinal + " leitura(s) sem sinal do microfone foram omitidas" : "");
   }
 
   /* ---------------- tabela ---------------- */
@@ -461,26 +434,27 @@
     $("btnMais").hidden = linhas.length <= estado.mostrando;
   }
 
-  /* ---------------- dispositivos ---------------- */
-  function renderDispositivos() {
-    const vistos = [...new Set(estado.linhas.map((l) => l.dispositivo).filter(Boolean))].sort();
-    for (const d of vistos) if (!estado.dispositivos.includes(d)) estado.dispositivos.push(d);
-    const sel = $("seletorDispositivo");
-    const atual = sel.value;
-    sel.textContent = "";
-    const todos = new Option("Todos", "");
-    sel.appendChild(todos);
-    for (const d of estado.dispositivos) sel.appendChild(new Option(d, d));
-    sel.value = atual;
-    sel.parentElement.hidden = estado.dispositivos.length < 2;
+  /* ---------------- eventos ---------------- */
+  function renderEventos() {
+    const ul = $("listaEventos");
+    ul.textContent = "";
+    if (!estado.eventos.length) { ul.innerHTML = "<li class='vazio'>Nenhum evento registrado.</li>"; return; }
+    for (const ev of estado.eventos) {
+      const li = document.createElement("li");
+      const b = document.createElement("b"); b.textContent = fmtDiaHora.format(ev.t);
+      const d = document.createElement("span");
+      const tag = document.createElement("span"); tag.className = "tag"; tag.textContent = ev.tipo + (ev.caixa_aberta ? " · caixa aberta" : "");
+      d.appendChild(tag); d.appendChild(document.createTextNode(ev.descricao));
+      li.appendChild(b); li.appendChild(d); ul.appendChild(li);
+    }
   }
 
   function render() {
-    renderDispositivos();
+    renderEventos();
     renderTiles();
     renderGraficos();
     renderTabela();
-    const rot = { 1: "ultima hora", 6: "ultimas 6 horas", 24: "ultimas 24 horas", 168: "ultimos 7 dias", 0: "historico completo" }[estado.horas];
+    const rot = estado.janela ? C.janelas[estado.janela].rotulo + " de coleta" : { 24: "24 horas finais da coleta", 168: "7 dias finais da coleta", 0: "coleta completa" }[estado.horas];
     $("notaPeriodo").textContent = estado.linhas.length
       ? estado.linhas.length.toLocaleString("pt-BR") + " leituras · " + rot
       : "nada encontrado · " + rot;
@@ -497,18 +471,17 @@
 
   /* ---------------- eventos ---------------- */
   $("segPeriodo").addEventListener("click", (e) => {
-    const b = e.target.closest("button[data-horas]");
+    const b = e.target.closest("button[data-horas], button[data-janela]");
     if (!b) return;
     [...e.currentTarget.querySelectorAll("button")].forEach((x) => { x.classList.remove("ativo"); x.removeAttribute("aria-pressed"); });
     b.classList.add("ativo"); b.setAttribute("aria-pressed", "true");
-    estado.horas = Number(b.dataset.horas);
+    estado.janela = b.dataset.janela || "";
+    estado.horas = b.dataset.horas ? Number(b.dataset.horas) : 0;
     estado.mostrando = PAGINA_TABELA;
     carregar();
   });
-  $("seletorDispositivo").addEventListener("change", (e) => { estado.dispositivo = e.target.value; estado.mostrando = PAGINA_TABELA; carregar(); });
   $("soComAudio").addEventListener("change", (e) => { estado.soComAudio = e.target.checked; estado.mostrando = PAGINA_TABELA; renderTabela(); });
   $("btnMais").addEventListener("click", () => { estado.mostrando += PAGINA_TABELA; renderTabela(); });
-  $("btnAtualizar").addEventListener("click", () => carregar());
   $("btnTema").addEventListener("click", () => {
     const atual = document.documentElement.getAttribute("data-theme");
     aplicarTema(atual === "dark" ? "light" : atual === "light" ? null : "dark");
@@ -522,14 +495,10 @@
     redimTimer = setTimeout(() => { if (estado.linhas.length) renderGraficos(); }, 160);
   });
 
-  document.addEventListener("visibilitychange", () => { if (!document.hidden) carregar({ silencioso: true }); });
 
   /* ---------------- inicio ---------------- */
   document.title = C.titulo;
   $("titulo").textContent = C.titulo;
   aplicarTema(temaSalvo());
   carregar();
-  if (C.segundosRefresh > 0) {
-    estado.timer = setInterval(() => { if (!document.hidden) carregar({ silencioso: true }); }, C.segundosRefresh * 1000);
-  }
 })();

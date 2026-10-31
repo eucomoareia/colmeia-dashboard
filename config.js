@@ -1,20 +1,17 @@
-// Configuracao do painel. A chave abaixo e publica (publishable/anon):
-// ela so consegue ler a tabela porque existe uma policy de RLS de leitura publica.
-// Nunca coloque aqui a service_role key.
+// Configuracao do painel. Os dados agora ficam no proprio repositorio, em dados/:
+// o painel nao depende mais do Supabase.
 window.CONFIG = {
-  supabaseUrl: "https://mownkkgvqixlodofanyd.supabase.co",
-  supabaseKey: "sb_publishable_uFec9t4nYoTWeAHOTt_NxA_PbaBxsfj",
-  // Chave anon legada, usada automaticamente caso a publishable seja rejeitada.
-  supabaseKeyFallback: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1vd25ra2d2cWl4bG9kb2ZhbnlkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI1NzI5MTQsImV4cCI6MjA5ODE0ODkxNH0.5t_OFnVfXxH0tUAOI0kwhjckKohMZz6usvTGp0MS8vc",
-  table: "leituras",
-  bucket: "audio-colmeia",
   titulo: "Monitoramento da colmeia",
+  arquivoLeituras: "dados/leituras.csv",   // t (unix, s), temp, umidade, db, audio
+  arquivoEventos: "dados/eventos.json",    // aberturas da caixa e intervencoes
+  pastaAudios: "dados/audios/",            // clipes WAV de 2 s
+  dispositivo: "colmeia-01",
+  fuso: "America/Belem",                   // horario de Maraba, UTC-3
   // Leituras com db abaixo deste valor sao tratadas como "sem sinal" do microfone.
   pisoRuidoDb: -120,
-  // Depois de quantos minutos sem leitura o dispositivo aparece como offline.
-  minutosParaOffline: 10,
-  // Intervalo do refresh automatico, em segundos (0 desliga).
-  segundosRefresh: 30,
-  // Teto de linhas buscadas por consulta.
-  limiteLinhas: 5000
+  // Janelas usadas no TCC (inicio e fim em UTC).
+  janelas: {
+    primeiros: { rotulo: "5 primeiros dias", ini: "2026-08-22T20:42:00Z", fim: "2026-08-28T02:59:59Z" },
+    ultimos:   { rotulo: "5 últimos dias",   ini: "2026-09-06T03:00:00Z", fim: "2026-09-10T21:00:00Z" }
+  }
 };
