@@ -77,9 +77,11 @@
     const todas = estado.todas;
     if (!todas.length) return [];
     if (estado.janela) {
-      const j = C.janelas[estado.janela];
-      const a = new Date(j.ini).getTime(), b = new Date(j.fim).getTime();
-      return todas.filter((l) => l.t.getTime() >= a && l.t.getTime() <= b);
+      const faixas = (C.janelas[estado.janela].partes || [estado.janela]).map((k) => {
+        const j = C.janelas[k];
+        return [new Date(j.ini).getTime(), new Date(j.fim).getTime()];
+      });
+      return todas.filter((l) => faixas.some(([a, b]) => l.t.getTime() >= a && l.t.getTime() <= b));
     }
     if (estado.horas > 0) {
       // periodo contado a partir da ultima leitura da coleta, nao de agora
@@ -256,12 +258,18 @@
     const m = { t: 14, r: 16, b: 24, l: 46 };
     const iw = Math.max(10, W - m.l - m.r), ih = Math.max(10, H - m.t - m.b);
 
-    const xs = pontos.map((p) => p.x);
+    // modo "ambos": o intervalo vazio entre as duas janelas e encurtado para nao desperdicar espaco
+    const corte = estado.janela === "ambos"
+      ? { a: new Date(C.janelas.primeiros.fim).getTime(), folga: new Date(C.janelas.ultimos.ini).getTime() - new Date(C.janelas.primeiros.fim).getTime() }
+      : null;
+    const comp = (x) => (corte && x > corte.a ? x - corte.folga : x);
+    const desc = (x) => (corte && x > corte.a ? x + corte.folga : x);
+    const xs = pontos.map((p) => comp(p.x));
     const x0 = Math.min(...xs), x1 = Math.max(...xs);
     const ys = validos.map((p) => p.y);
     const esc = escalaBonita(Math.min(...ys), Math.max(...ys));
 
-    const px = (x) => m.l + ((x - x0) / (x1 - x0 || 1)) * iw;
+    const px = (x) => m.l + ((comp(x) - x0) / (x1 - x0 || 1)) * iw;
     const py = (y) => m.t + ih - ((y - esc.lo) / (esc.hi - esc.lo || 1)) * ih;
 
     const svg = el("svg", { viewBox: `0 0 ${W} ${H}`, preserveAspectRatio: "none", role: "img" });
@@ -285,14 +293,19 @@
     for (let i = 0; i < nTicks; i++) {
       const x = x0 + ((x1 - x0) * i) / (nTicks - 1);
       const tx = el("text", { class: "g-tick", x: px(x), y: m.t + ih + 16, "text-anchor": i === 0 ? "start" : i === nTicks - 1 ? "end" : "middle" });
-      tx.textContent = fmtX.format(new Date(x));
+      tx.textContent = fmtX.format(new Date(desc(x)));
       svg.appendChild(tx);
+    }
+
+    if (corte && corte.a >= x0 && corte.a <= x1) {
+      svg.appendChild(el("line", { class: "g-evento", x1: px(corte.a), x2: px(corte.a), y1: m.t, y2: m.t + ih, "stroke-dasharray": "2 4" }));
     }
 
     // eventos registrados: linha vertical tracejada
     for (const ev of estado.eventos) {
       const x = ev.t.getTime();
-      if (x < x0 || x > x1) continue;
+      if (corte && x > corte.a && x < corte.a + corte.folga) continue;
+      if (comp(x) < x0 || comp(x) > x1) continue;
       const ln = el("line", { class: "g-evento", x1: px(x), x2: px(x), y1: m.t, y2: m.t + ih });
       const tt = el("title", {}); tt.textContent = fmtDiaHora.format(ev.t) + " · " + ev.tipo;
       ln.appendChild(tt);

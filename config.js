@@ -12,6 +12,7 @@ window.CONFIG = {
   // Janelas usadas no TCC (inicio e fim em UTC).
   janelas: {
     primeiros: { rotulo: "5 primeiros dias", ini: "2026-08-22T20:42:00Z", fim: "2026-08-28T02:59:59Z" },
-    ultimos:   { rotulo: "5 últimos dias",   ini: "2026-09-06T03:00:00Z", fim: "2026-09-10T21:00:00Z" }
+    ultimos:   { rotulo: "5 últimos dias",   ini: "2026-09-06T03:00:00Z", fim: "2026-09-10T21:00:00Z" },
+    ambos:     { rotulo: "5 primeiros + 5 últimos dias", partes: ["primeiros", "ultimos"] }
   }
 };
